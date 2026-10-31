@@ -109,7 +109,7 @@ rf_engine$importance |>
        fill = "Mean decrease in\ngini") +
   theme_minimal()
 ```
-
+A higher number here means that the feature has a bigger influence in the models classification, so profile width plays the biggest role, and volume does not effect classification as much. Profile width, length, and profile area play the biggest roles in the model distinguishing between cut, trample, percussion, and tooth marks. 
 ```{r}
 # how many trees are enough? OOB error rate by number of trees
 
@@ -123,4 +123,12 @@ rf_engine$err.rate |>
        y = "Out of bag error rate") +
   theme_minimal()
 ```
+How good is the forest, and how do you know?
+
+The forest has a decent prediction rate, with the OOB error rate reaching about 22% at around 300 trees. This means the model has about a 78% correct prediction rate, when using 300 trees. You can see that using a small number of tree produces a high OOB error rate, reaching 33% when the number of trees is very few. It improves at around 50 trees, and reaches its max at around 300 trees, and gets slightly higher when using more than 300 trees.
+
+
+Where does the forest go wrong, and what are the archaeological implications?
+
+The model doesn't look at all features equally, and relies more on features with a higher mean decrease in gini. This means that it could potentially overlook some differences in the features towards the bottom of the figure. The top features focus a lot on morphology, but just because something is morphologically similar does not mean it actually is the same thing. This could lead artifacts, or bones in this case, to be classified incorrectly, as the model doesn't focus as much on other variables. 
 
