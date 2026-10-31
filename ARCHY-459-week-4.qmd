@@ -1,0 +1,126 @@
+---
+title: "ARCHY-459-week-4"
+format: html
+---
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(randomForest)
+library(parsnip)
+
+tidymodels_prefer()
+```
+
+## Import and tidy
+
+```{r}
+marks <- read_csv("data sheet 3.csv") |>
+  mutate(Trace.Type = factor(str_to_lower(Trace.Type)))
+```
+
+## Split the data
+
+```{r}
+# label: split
+
+set.seed(459)
+marks_split <- initial_split(marks, prop = 0.8, strata = Trace.Type)
+marks_train <- training(marks_split)
+marks_test <- testing(marks_split)
+```
+
+```{r}
+# measurements in the training set, one facet per feature
+
+mark_measurements <-
+  marks_train |>
+  select(Trace.Type, where(is.numeric)) |>
+  pivot_longer(-Trace.Type, names_to = "feature")
+
+ggplot(mark_measurements, aes(x = Trace.Type, y = value, fill = Trace.Type)) +
+  geom_boxplot() +
+  facet_wrap(~ feature, scales = "free_y") +
+  scale_y_log10() +
+  scale_fill_viridis_d() +
+  labs(x = "Trace type",
+       y = "Measurement (log10 scale)",
+       fill = "Trace type") +
+  theme_minimal()
+```
+
+## baseline
+
+```{r}
+class_props <- 
+marks_train |>
+  count(Trace.Type) |>
+  mutate(prop = n / sum(n))
+
+baseline_accuracy <- round(max(class_props$prop), 2)
+```
+
+our baseline accuracy is 'r baseline accuracy', so any model we create beat this number to be useful.
+
+```{r}
+marks_rec <-
+recipe(Trace.Type ~ . , 
+       data = marks_train) |>
+  update_role(all_nominal_predictors(), 
+              new_role = "metadata")
+```
+
+## One Random Forest and its out of bag error
+
+```{r}
+#| label: rf-one-accuracy
+
+# model specification: 3 measures tried per split
+rf_spec <- 
+  rand_forest(mtry = 3, trees = 500) |> 
+  set_engine("randomForest", importance = TRUE) |> 
+  set_mode("classification")
+
+# fit the recipe and spec to our training set
+set.seed(459) 
+rf_one <- workflow(marks_rec, rf_spec) |>
+  fit(marks_train)
+
+rf_engine <- extract_fit_engine(rf_one)
+
+oob_accuracy <- accuracy_vec(truth = marks_train$Trace.Type, 
+                             estimate = rf_engine$predicted)
+```
+
+Out of bag accuracy of our model is 'r round(oob_accuracy, 2)'
+
+```{r}
+# gini importance (mean decrease in gini) from the fitted random forest
+
+rf_engine$importance |>
+  as_tibble(rownames = "feature") |>
+  select(feature, gini = MeanDecreaseGini) |>
+  mutate(feature = fct_reorder(feature, gini)) |>
+  ggplot(aes(x = gini, y = feature, fill = gini)) +
+  geom_col() +
+  scale_fill_viridis_c() +
+  labs(x = "Mean decrease in gini",
+       y = "Feature",
+       fill = "Mean decrease in\ngini") +
+  theme_minimal()
+```
+
+```{r}
+# how many trees are enough? OOB error rate by number of trees
+
+rf_engine$err.rate |>
+  as_tibble(rownames = "tree") |>
+  select(tree, OOB) |>
+  mutate(tree = as.numeric(tree)) |>
+  ggplot(aes(x = tree, y = OOB)) +
+  geom_line() +
+  labs(x = "Number of trees",
+       y = "Out of bag error rate") +
+  theme_minimal()
+```
+
